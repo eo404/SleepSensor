@@ -7,7 +7,6 @@ Stage 1 – soft beep + first voice warning
 Stage 2 – loud alarm + urgent voice advice, cycling every ADVICE_INTERVAL_SEC
 """
 
-import os
 import time
 import random
 import threading
@@ -42,17 +41,20 @@ CLEARED_PHRASES = [
     "Stay alert. Take a break if you feel tired.",
 ]
 
-ADVICE_INTERVAL_SEC = 8.0   # how often to repeat advice while alarm is active
+ADVICE_INTERVAL_SEC = 8.0  # how often to repeat advice while alarm is active
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 class DummySound:
-    def play(self, loops=0): print(
-        "[Alarm] Sound file not found – using DummySound.")
+    def play(self, loops=0):
+        print("[Alarm] Sound file not found – using DummySound.")
 
-    def stop(self): pass
-    def set_volume(self, v): pass
+    def stop(self):
+        pass
+
+    def set_volume(self, v):
+        pass
 
 
 def _load_sound(path: str):
@@ -72,7 +74,6 @@ class AlarmManager:
         self._stage = 0
         self._tts_lock = threading.Lock()
         self._tts_engine = self._init_tts()
-        self._last_advice_t = 0.0
         self._advice_thread = None
         self._stop_advice = threading.Event()
 
@@ -117,16 +118,26 @@ class AlarmManager:
 
     # ── Repeating advice loop (runs while stage > 0) ──────────────────────────
 
-    def _start_advice_loop(self, stage: int):
+    def _start_advice_loop(self):
+        """Start (or restart) the repeating advice loop."""
+        # Stop any existing loop
+        self._stop_advice_loop()
         self._stop_advice.clear()
 
         def _loop():
+            # Speak immediately, then repeat every ADVICE_INTERVAL_SEC
             while not self._stop_advice.is_set():
-                time.sleep(ADVICE_INTERVAL_SEC)
-                if self._stop_advice.is_set():
-                    break
                 pool = STAGE2_PHRASES if self._stage >= 2 else STAGE1_PHRASES
                 self._speak(random.choice(pool), interrupt=True)
+
+                # Wait for the next cycle, but remain responsive to stop requests
+                # (sleep in small increments instead of a single long sleep)
+                step = 0.1
+                steps = int(ADVICE_INTERVAL_SEC / step)
+                for _ in range(max(1, steps)):
+                    if self._stop_advice.is_set():
+                        return
+                    time.sleep(step)
 
         self._advice_thread = threading.Thread(target=_loop, daemon=True)
         self._advice_thread.start()
@@ -156,15 +167,14 @@ class AlarmManager:
             self._sound.set_volume(0.4)
             if self._stage == 0:
                 self._sound.play(loops=-1)
-                self._speak(random.choice(STAGE1_PHRASES))
-                self._start_advice_loop(1)
+                self._start_advice_loop()
             self._stage = 1
 
         elif desired == 2:
             self._sound.set_volume(1.0)
             if self._stage == 0:
                 self._sound.play(loops=-1)
-                self._start_advice_loop(2)
+                self._start_advice_loop()
             if previous_stage < 2:
                 # Escalation — speak urgently
                 self._speak(random.choice(STAGE2_PHRASES), interrupt=False)
