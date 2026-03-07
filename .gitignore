@@ -1,0 +1,15 @@
+# Environment variables - never commit this
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+
+# Session logs
+logs/sessions/
+logs/hazards.json
+
+# MediaPipe model
+face_landmarker.task
