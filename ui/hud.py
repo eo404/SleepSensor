@@ -331,40 +331,5 @@ def draw_environment_panel(frame, env):
     right = "R" if env.blind_spot.right_alert else "-"
 
     cv2.putText(frame,
-                f"Blind: {left}  {right}",
-                (px + 8, ty),
-                FONT,
-                0.42,
-                C_WHITE,
-                1)
-
-    ty += 20
-
-    # Hazards
-    hazards = env.hazards.recent_hazards
-
-    if hazards:
-
-        h = hazards[0]
-
-        cv2.putText(
-            frame,
-            f"Hazard: {h.kind}",
-            (px + 8, ty),
-            FONT,
-            0.42,
-            C_ORANGE,
-            1,
-        )
-
-    else:
-
-        cv2.putText(
-            frame,
-            "Hazards: none",
-            (px + 8, ty),
-            FONT,
-            0.42,
-            C_WHITE,
-            1,
-        )
+                f"Drive time: {engine.drive_timer.elapsed_str}",
+                (px + 8, py + 100), FONT, 0.38, C_WHITE, 1, cv2.LINE_AA)
