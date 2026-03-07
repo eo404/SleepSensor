@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # SleepSensor 🚗💤
 
 Real-time driver drowsiness detection using MediaPipe Face Mesh.
@@ -71,3 +72,6 @@ Edit **`config.py`** to adjust thresholds without touching any logic:
 - `MAR_THRESHOLD` – yawn sensitivity
 - `PITCH_DROWSY_DEG` – head-nod angle for head-pose alert
 - `SCORE_*` – drowsiness score weighting constants
+=======
+
+>>>>>>> 4611ed28827bd72f9029149ce23bd8ff4b3c284f
