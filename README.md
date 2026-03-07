@@ -1,77 +1,83 @@
-<<<<<<< HEAD
-# SleepSensor 🚗💤
+# SleepSensor
 
-Real-time driver drowsiness detection using MediaPipe Face Mesh.
+Real-time driver drowsiness detection with a full Safety Awareness Engine.
+
+## System Architecture
+
+```
+Camera
+   │
+   ▼
+Drowsiness Detection  (MediaPipe Face Mesh – EAR / MAR / Head Pose)
+   │
+   ▼
+Safety Awareness Engine
+   │
+   ├─ Fatigue Alerts          → voice warning when eyes close
+   ├─ Driving Time Monitoring → break reminders at 30 / 60 / 90 / 120 min
+   ├─ Safety Messages         → yawn, head-pose, wellness tips
+   └─ Driver Safety Score     → composite 0–100 score (SAFE / CAUTION / AT RISK / DANGEROUS)
+   │
+   ▼
+Driver Interface  (OpenCV HUD + pyttsx3 voice)
+```
 
 ## Features
 
 | Feature | Detail |
 |---|---|
-| **EAR eye detection** | Eye Aspect Ratio via 468-pt mesh – robust to glasses & lighting |
-| **Iris tracking** | Iris landmarks drawn as circles on each eye |
-| **Yawn detection** | Mouth Aspect Ratio (MAR) triggers yawn events |
-| **Head pose** | Pitch/yaw/roll from solvePnP – detects nodding head |
-| **Escalating alarm** | Stage 1 (soft, 1.5s) → Stage 2 (loud, 3s) |
-| **Voice alert** | pyttsx3 says "Wake up!" on stage-2 escalation |
-| **Adaptive calibration** | Press `C` to auto-set EAR threshold to your eyes |
-| **Drowsiness score** | 0–100 fatigue score shown as on-screen bar |
-| **EAR graph** | Real-time 100-sample history plotted bottom-left |
-| **Session dashboard** | Elapsed time, event counts, alarm count top-right |
-| **CSV logging** | Events + per-frame metrics saved to `logs/sessions/` |
-| **Settings overlay** | Press `S` for live config display |
+| EAR eye detection | Eye Aspect Ratio via 468-pt mesh |
+| Yawn detection | Mouth Aspect Ratio (MAR) |
+| Head pose | Pitch/yaw/roll via solvePnP — detects nodding |
+| Escalating alarm | Stage 1 (1.5s) → Stage 2 (3s) |
+| Screen flash | Yellow border (stage 1) → red full-screen (stage 2) |
+| Voice fatigue alerts | Rotating phrases, repeats every 8 s while active |
+| Yawn voice alert | Speaks when yawn detected (30 s cooldown) |
+| Head-pose voice alert | Speaks when head droops (20 s cooldown) |
+| Drive time monitoring | Break reminders at 30 / 60 / 90 / 120 min |
+| Driver Safety Score | 0–100 composite with trend arrow |
+| Calibration | Press C — 5-second EAR baseline |
+| CSV logging | Events + per-frame metrics in logs/sessions/ |
+| Settings overlay | Press S |
 
 ## Setup
 
 ```bash
-# 1. Create & activate virtual environment
 python -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
-
-# 2. Install dependencies
+venv\Scripts\activate        # Windows
 pip install -r requirements.txt
-
-# 3. Run
 python main.py
 ```
 
 ## File Structure
 
 ```
-SLEEPSENSOR/
-├── main.py               ← entry point
-├── config.py             ← all tuneable constants
+SleepSensor/
+├── main.py
+├── config.py
 ├── requirements.txt
-├── alarmaudio.mp3        ← your alarm sound
 ├── core/
-│   ├── app.py            ← main loop
-│   ├── detector.py       ← MediaPipe, EAR, MAR, head-pose
-│   └── state.py          ← drowsiness state machine & scoring
+│   ├── app.py          ← main loop
+│   ├── detector.py     ← MediaPipe EAR/MAR/head-pose
+│   └── state.py        ← drowsiness state machine
+├── safety/             ← Safety Awareness Engine
+│   ├── engine.py       ← orchestrator
+│   ├── voice.py        ← TTS worker thread
+│   ├── drive_timer.py  ← break reminders
+│   └── safety_score.py ← composite safety score
 ├── alerts/
-│   └── __init__.py       ← escalating alarm + voice (pyttsx3)
+│   └── alarm.py        ← alarm stage manager
 ├── ui/
-│   └── hud.py            ← all OpenCV HUD drawing
+│   └── hud.py          ← all OpenCV drawing + safety panel
 └── logs/
-    ├── logger.py         ← CSV session writer
-    └── sessions/         ← auto-created; one CSV pair per session
+    ├── logger.py
+    └── sessions/
 ```
 
 ## Hotkeys
 
 | Key | Action |
 |-----|--------|
-| `Q` | Quit |
-| `C` | Calibrate EAR threshold (keep eyes open for 5 s) |
-| `S` | Toggle settings overlay |
-
-## Tuning
-
-Edit **`config.py`** to adjust thresholds without touching any logic:
-
-- `EAR_THRESHOLD_DEFAULT` – default closed-eye threshold (calibration overrides)
-- `EYES_CLOSED_TRIGGER_SECONDS` – seconds before alarm starts
-- `MAR_THRESHOLD` – yawn sensitivity
-- `PITCH_DROWSY_DEG` – head-nod angle for head-pose alert
-- `SCORE_*` – drowsiness score weighting constants
-=======
-
->>>>>>> 4611ed28827bd72f9029149ce23bd8ff4b3c284f
+| Q | Quit |
+| C | Calibrate EAR threshold |
+| S | Toggle settings overlay |

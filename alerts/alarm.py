@@ -1,26 +1,18 @@
 """
-alerts/alarm.py
-Escalating alarm with rotating voice safety advice.
-
-Stage 0 – silent
-Stage 1 – soft beep + first voice warning
-Stage 2 – loud alarm + urgent voice advice, cycling every ADVICE_INTERVAL_SEC
+alerts/alarm.py  –  voice-only alerts, no pygame, no ALARM_FILE
 """
 
+from __future__ import annotations
 import time
 import random
 import threading
-import pygame
+import queue
 
-from config import ALARM_FILE
-
-
-# ── Safety advice library ─────────────────────────────────────────────────────
 
 STAGE1_PHRASES = [
     "You seem drowsy. Please stay alert.",
     "Warning. Your eyes are closing. Stay focused.",
-    "Drowsiness detected. Take a deep breath.",
+    "Driver fatigue detected. Take a deep breath.",
     "Stay awake. You are driving.",
     "Eyes closing. Please concentrate on the road.",
 ]
@@ -30,9 +22,7 @@ STAGE2_PHRASES = [
     "You are falling asleep! Stop the vehicle safely.",
     "Critical drowsiness! Find a safe place to stop immediately.",
     "Wake up! Your life is at risk. Pull over.",
-    "Severe drowsiness detected. Do not continue driving.",
     "Please stop driving immediately. You need rest.",
-    "Alert! You are a danger to yourself and others. Pull over now.",
 ]
 
 CLEARED_PHRASES = [
@@ -41,146 +31,98 @@ CLEARED_PHRASES = [
     "Stay alert. Take a break if you feel tired.",
 ]
 
-ADVICE_INTERVAL_SEC = 8.0  # how often to repeat advice while alarm is active
+ADVICE_INTERVAL_SEC = 8.0
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+class _TTSWorker:
+    """Single daemon thread owns the pyttsx3 engine; receives phrases via queue."""
 
-class DummySound:
-    def play(self, loops=0):
-        print("[Alarm] Sound file not found – using DummySound.")
-
-    def stop(self):
-        pass
-
-    def set_volume(self, v):
-        pass
-
-
-def _load_sound(path: str):
-    pygame.mixer.init()
-    try:
-        return pygame.mixer.Sound(path)
-    except pygame.error as e:
-        print(f"[Alarm] Could not load sound '{path}': {e}")
-        return DummySound()
-
-
-# ── AlarmManager ─────────────────────────────────────────────────────────────
-
-class AlarmManager:
     def __init__(self):
-        self._sound = _load_sound(ALARM_FILE)
-        self._stage = 0
-        self._tts_lock = threading.Lock()
-        self._tts_engine = self._init_tts()
-        self._advice_thread = None
-        self._stop_advice = threading.Event()
+        self._q = queue.Queue()
+        threading.Thread(target=self._run, daemon=True).start()
 
-    # ── TTS engine ────────────────────────────────────────────────────────────
+    def say(self, text: str, clear: bool = False) -> None:
+        if clear:
+            while not self._q.empty():
+                try:
+                    self._q.get_nowait()
+                except queue.Empty:
+                    break
+        self._q.put(text)
 
-    def _init_tts(self):
+    def _run(self):
         try:
             import pyttsx3
             engine = pyttsx3.init()
             engine.setProperty("rate", 155)
             engine.setProperty("volume", 1.0)
-            # Pick a clear voice if available
-            voices = engine.getProperty("voices")
-            for v in voices:
+            for v in engine.getProperty("voices"):
                 if "english" in v.name.lower() or "zira" in v.name.lower():
                     engine.setProperty("voice", v.id)
                     break
-            return engine
-        except Exception as e:
-            print(
-                f"[Alarm] TTS unavailable: {e}. Install pyttsx3 for voice advice.")
-            return None
-
-    def _speak(self, text: str, interrupt: bool = False):
-        """Speak text in a background thread. If interrupt=True, skip if already speaking."""
-        if self._tts_engine is None:
-            print(f"[Voice] {text}")
-            return
-
-        if interrupt and self._tts_lock.locked():
-            return  # don't queue up behind an ongoing phrase
-
-        def _run():
-            with self._tts_lock:
+            while True:
+                text = self._q.get()
                 try:
-                    self._tts_engine.say(text)
-                    self._tts_engine.runAndWait()
+                    engine.say(text)
+                    engine.runAndWait()
                 except Exception:
                     pass
+        except Exception as e:
+            print(f"[Voice] TTS unavailable: {e}. Install pyttsx3.")
+            while True:
+                print(f"[Voice] {self._q.get()}")
 
-        threading.Thread(target=_run, daemon=True).start()
 
-    # ── Repeating advice loop (runs while stage > 0) ──────────────────────────
+class AlarmManager:
+    def __init__(self):
+        self._stage = 0
+        self._tts = _TTSWorker()
+        self._stop_loop = threading.Event()
+        self._loop_thread = None
 
     def _start_advice_loop(self):
-        """Start (or restart) the repeating advice loop."""
-        # Stop any existing loop
-        self._stop_advice_loop()
-        self._stop_advice.clear()
+        self._stop_loop.clear()
 
         def _loop():
-            # Speak immediately, then repeat every ADVICE_INTERVAL_SEC
-            while not self._stop_advice.is_set():
+            while not self._stop_loop.wait(timeout=ADVICE_INTERVAL_SEC):
+                if self._stop_loop.is_set():
+                    break
                 pool = STAGE2_PHRASES if self._stage >= 2 else STAGE1_PHRASES
-                self._speak(random.choice(pool), interrupt=True)
+                self._tts.say(random.choice(pool), clear=True)
 
-                # Wait for the next cycle, but remain responsive to stop requests
-                # (sleep in small increments instead of a single long sleep)
-                step = 0.1
-                steps = int(ADVICE_INTERVAL_SEC / step)
-                for _ in range(max(1, steps)):
-                    if self._stop_advice.is_set():
-                        return
-                    time.sleep(step)
-
-        self._advice_thread = threading.Thread(target=_loop, daemon=True)
-        self._advice_thread.start()
+        self._loop_thread = threading.Thread(target=_loop, daemon=True)
+        self._loop_thread.start()
 
     def _stop_advice_loop(self):
-        self._stop_advice.set()
-
-    # ── Public API ────────────────────────────────────────────────────────────
+        self._stop_loop.set()
 
     @property
     def stage(self) -> int:
         return self._stage
 
-    def set_stage(self, desired: int, previous_stage: int):
+    def set_stage(self, desired: int, previous_stage: int) -> None:
         if desired == self._stage:
             return
 
         if desired == 0:
-            # Alarm clearing
-            self._sound.stop()
             self._stop_advice_loop()
             self._stage = 0
             if previous_stage > 0:
-                self._speak(random.choice(CLEARED_PHRASES))
+                self._tts.say(random.choice(CLEARED_PHRASES), clear=True)
 
         elif desired == 1:
-            self._sound.set_volume(0.4)
             if self._stage == 0:
-                self._sound.play(loops=-1)
+                self._tts.say(random.choice(STAGE1_PHRASES), clear=True)
                 self._start_advice_loop()
             self._stage = 1
 
         elif desired == 2:
-            self._sound.set_volume(1.0)
             if self._stage == 0:
-                self._sound.play(loops=-1)
                 self._start_advice_loop()
             if previous_stage < 2:
-                # Escalation — speak urgently
-                self._speak(random.choice(STAGE2_PHRASES), interrupt=False)
+                self._tts.say(random.choice(STAGE2_PHRASES), clear=True)
             self._stage = 2
 
     def stop(self):
         self._stop_advice_loop()
-        self._sound.stop()
         self._stage = 0
