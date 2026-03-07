@@ -1,92 +1,73 @@
-<img width="2048" height="1024" alt="Gemini_Generated_Image_rpxf3krpxf3krpxf" src="https://github.com/user-attachments/assets/12a1d997-bb02-4826-9026-a262968793d6" />
+# SleepSensor 🚗💤
 
-
-# SleepSensor
-An application which monitors the person's eyes and alarm if both eyes are closed for more than 10 seconds ( Considers the person is asleep). 
-
-
-## Overview
-This project is a real-time Drowsiness Detection System built using Python and OpenCV. It is designed to help prevent accidents by monitoring a user's eyes and detecting signs of drowsiness. When the system detects that the user's eyes have been closed for a prolonged period, it triggers an audible alarm to alert them.
-
-It can also be used in different domains like: 
-- Education : to check if the pupil fell asleep in his study time.
-- Medical : to sense if an uncosious patient has regained consiousness etc.
-
-This application is a great example of a practical computer vision project that leverages Haar Cascades for object detection.
+Real-time driver drowsiness detection using MediaPipe Face Mesh.
 
 ## Features
-- Real-time Detection: The system processes video frames in real-time from your webcam to monitor your face and eyes.
 
-- Drowsiness Alarm: An audible alarm is triggered when the system detects that the user's eyes have been closed for a predefined number of consecutive frames.
+| Feature | Detail |
+|---|---|
+| **EAR eye detection** | Eye Aspect Ratio via 468-pt mesh – robust to glasses & lighting |
+| **Iris tracking** | Iris landmarks drawn as circles on each eye |
+| **Yawn detection** | Mouth Aspect Ratio (MAR) triggers yawn events |
+| **Head pose** | Pitch/yaw/roll from solvePnP – detects nodding head |
+| **Escalating alarm** | Stage 1 (soft, 1.5s) → Stage 2 (loud, 3s) |
+| **Voice alert** | pyttsx3 says "Wake up!" on stage-2 escalation |
+| **Adaptive calibration** | Press `C` to auto-set EAR threshold to your eyes |
+| **Drowsiness score** | 0–100 fatigue score shown as on-screen bar |
+| **EAR graph** | Real-time 100-sample history plotted bottom-left |
+| **Session dashboard** | Elapsed time, event counts, alarm count top-right |
+| **CSV logging** | Events + per-frame metrics saved to `logs/sessions/` |
+| **Settings overlay** | Press `S` for live config display |
 
-- Adjustable Sensitivity: The detection sensitivity can be easily configured by changing a single variable in the code.
+## Setup
 
-- Customizable Audio: The alarm sound can be customized by simply replacing the alarmaudio.mp3 file.
-
-## Technologies Used :
-- Python
-
-- OpenCV (cv2)
-
-- Pygame
-
-# Setup and Installation
-- Step 1: Clone the Repository
-First, clone this repository to your local machine:
-https://github.com/hrithikvinayakr/SleepSensor
-
-- Step 2: Set up the Virtual Environment
-It's recommended to work within a virtual environment.
+```bash
+# 1. Create & activate virtual environment
 python -m venv venv
-# On Windows
-.\venv\Scripts\activate
-# On macOS/Linux
-source venv/bin/activate
+source venv/bin/activate          # Windows: venv\Scripts\activate
 
-- Step 3: Install Dependencies
-Install the required Python libraries using pip:
-pip install opencv-python pygame
+# 2. Install dependencies
+pip install -r requirements.txt
 
-- Step 4: Download Haar Cascade Files
-The program requires two XML files for face and eye detection. Download the following files and place them directly into the eye-monitor project folder:
-haarcascade_frontalface_default.xml
-haarcascade_eye.xml
-
-- Step 5: Add a Custom Alarm Audio
-Place your desired alarm audio file in the project folder and name it alarmaudio.mp3.
-
-## How to Run
-With all dependencies installed and files in place, run the main.py script from your terminal:
+# 3. Run
 python main.py
-The application will start, and a window with your camera feed will appear. To exit the application, press the q key.
+```
 
-## Demonstration
-Here are a few screenshots and a video demonstrating the system in action.
+## File Structure
 
+```
+SLEEPSENSOR/
+├── main.py               ← entry point
+├── config.py             ← all tuneable constants
+├── requirements.txt
+├── alarmaudio.mp3        ← your alarm sound
+├── core/
+│   ├── app.py            ← main loop
+│   ├── detector.py       ← MediaPipe, EAR, MAR, head-pose
+│   └── state.py          ← drowsiness state machine & scoring
+├── alerts/
+│   └── __init__.py       ← escalating alarm + voice (pyttsx3)
+├── ui/
+│   └── hud.py            ← all OpenCV HUD drawing
+└── logs/
+    ├── logger.py         ← CSV session writer
+    └── sessions/         ← auto-created; one CSV pair per session
+```
 
+## Hotkeys
 
-- Technical part in VSCode:
+| Key | Action |
+|-----|--------|
+| `Q` | Quit |
+| `C` | Calibrate EAR threshold (keep eyes open for 5 s) |
+| `S` | Toggle settings overlay |
 
-<img width="1365" height="767" alt="Screenshot 2025-08-12 235846" src="https://github.com/user-attachments/assets/5a7403af-d7ca-4986-bf64-d14a3457d53c" />
+## Tuning
 
+Edit **`config.py`** to adjust thresholds without touching any logic:
 
-
-- Project detecting open eyes:
-
-<img width="1365" height="767" alt="Screenshot 2025-08-12 235733" src="https://github.com/user-attachments/assets/426ef6f8-a592-4df0-97ee-c0930f5281f6" />
-
-
-
-- Project detecting eyes closed with time period by counting frames:
-
-<img width="1365" height="767" alt="Screenshot 2025-08-12 235806" src="https://github.com/user-attachments/assets/e61454d1-37c5-404d-804b-864d07144ea4" />
-
-Click the link below to watch the video demonstration:
-https://drive.google.com/drive/folders/1pwGZE5e3wBB7Ves03e6DXMpCaBpwLGj9?usp=drive_link
-
-## Customization
-You can adjust the sensitivity of the drowsiness detection by changing the CONSECUTIVE_FRAMES_THRESHOLD variable in the main.py file. A higher value will require the eyes to be closed for a longer period before the alarm is triggered.
-
-
-License
-This project is licensed under the MIT License.
+- `EAR_THRESHOLD_DEFAULT` – default closed-eye threshold (calibration overrides)
+- `EYES_CLOSED_TRIGGER_SECONDS` – seconds before alarm starts
+- `MAR_THRESHOLD` – yawn sensitivity
+- `PITCH_DROWSY_DEG` – head-nod angle for head-pose alert
+- `SCORE_*` – drowsiness score weighting constants
