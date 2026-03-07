@@ -17,6 +17,14 @@ Architecture:
      └─ Driver Safety Score
      │
      ▼
+  Environment Awareness Engine (environment.env_engine)
+     │
+     ├─ Weather Monitoring
+     ├─ Night Mode Detection
+     ├─ Road Hazard Reporting
+     └─ Blind Spot Detection
+     │
+     ▼
   Driver Interface  (ui.hud + safety panel)
 """
 
@@ -27,6 +35,7 @@ from core.detector import Detector
 from core.state import DrowsinessState
 from alerts.alarm import AlarmManager
 from safety.engine import SafetyAwarenessEngine
+from environment.env_engine import EnvironmentEngine
 from ui.hud import HUD, draw_safety_panel
 from logs.logger import SessionLogger
 
@@ -36,7 +45,13 @@ class App:
         self.detector = Detector()
         self.state = DrowsinessState()
         self.alarm = AlarmManager()
+
+        # Safety system
         self.safety = SafetyAwarenessEngine()
+
+        # Environment system (NEW)
+        self.env = EnvironmentEngine()
+
         self.hud = HUD()
         self.logger = SessionLogger()
 
@@ -46,7 +61,7 @@ class App:
             print("[App] Error: Could not open camera.")
             return
 
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
         last_t = time.time()
@@ -68,6 +83,13 @@ class App:
 
                 # ── Detection ──────────────────────────────────────────────
                 det = self.detector.process(frame)
+
+                # ── Environment Engine (NEW) ───────────────────────────────
+                self.env.update(frame, self.state)
+
+                # Speak environment alerts
+                for msg in self.env.pop_voice_messages():
+                    self.safety.voice.say(msg)
 
                 # ── Drowsiness state ───────────────────────────────────────
                 self.state.update(det, dt)
@@ -91,7 +113,8 @@ class App:
                 for ev in self.state.events:
                     if not getattr(ev, "_logged", False):
                         self.logger.log_event(
-                            ev.kind, ev.timestamp, ev.duration)
+                            ev.kind, ev.timestamp, ev.duration
+                        )
                         ev._logged = True
 
                 if det.face_found:
@@ -99,6 +122,7 @@ class App:
 
                 # ── Draw HUD ───────────────────────────────────────────────
                 self.hud.draw(frame, det, self.state, self.alarm.stage)
+
                 # safety score + drive time
                 draw_safety_panel(frame, self.safety)
 
@@ -106,14 +130,25 @@ class App:
 
                 # ── Keyboard ───────────────────────────────────────────────
                 key = cv2.waitKey(1) & 0xFF
+
                 if key == ord("q"):
                     break
+
                 elif key == ord("c"):
                     self.state.start_calibration()
                     self.safety.voice.say(
-                        "Calibration started. Please keep your eyes open.", priority=True)
+                        "Calibration started. Please keep your eyes open.",
+                        priority=True,
+                    )
+
                 elif key == ord("s"):
                     self.hud.show_settings = not self.hud.show_settings
+
+                # Hazard reporting hotkeys
+                elif key in (ord("p"), ord("a"), ord("x"), ord("d"), ord("f")):
+                    msg = self.env.handle_key(chr(key))
+                    if msg:
+                        self.safety.voice.say(msg)
 
         finally:
             self._cleanup(cap)
@@ -121,6 +156,7 @@ class App:
     def _cleanup(self, cap):
         self.alarm.stop()
         self.detector.close()
+        self.env.close()
         self.logger.close()
         cap.release()
         cv2.destroyAllWindows()

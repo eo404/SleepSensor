@@ -54,3 +54,16 @@ HEAD_POSE_POINTS_IDX = [1, 33, 263, 61, 291, 199]
 
 # ── EAR history for on-screen graph ──────────────────────────────────────────
 EAR_HISTORY_LEN = 100               # number of samples to plot
+
+# ── Alarm ────────────────────────────────────────────────────────────────────
+ALARM_FILE = ""
+
+# ── Blind spot monitoring ────────────────────────────────────────────────────
+BLIND_SPOT_CAMERA_INDEX = -1        # -1 disables secondary camera input
+BLIND_SPOT_SENSITIVITY = 0.02       # lower = more sensitive motion detection
+
+# ── Weather monitoring ───────────────────────────────────────────────────────
+WEATHER_API_KEY = ""                # optional; can also use OPENWEATHER_API_KEY
+WEATHER_CITY = "London"
+WEATHER_POLL_INTERVAL_SEC = 300.0
+WEATHER_UNITS = "metric"           # "metric" or "imperial"
