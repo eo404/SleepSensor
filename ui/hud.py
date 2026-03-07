@@ -355,3 +355,100 @@ def draw_safety_panel(frame, engine):
     cv2.putText(frame,
                 f"Drive time: {engine.drive_timer.elapsed_str}",
                 (px + 8, py + 100), FONT, 0.38, C_WHITE, 1, cv2.LINE_AA)
+
+
+# ── Environment Detection Panel (right side) ──────────────────────────────────
+
+def draw_environment_panel(frame, env_data):
+    """
+    Draws the Environment Detection panel on the right side of the screen.
+    Shows day/night mode, ambient light, weather conditions, and simulated
+    temperature/wind data similar to a vehicle dashboard.
+    
+    Args:
+        frame: OpenCV frame to draw on
+        env_data: Dictionary containing environment data from EnvironmentMonitor
+    """
+    ih, iw = frame.shape[:2]
+    
+    # Panel dimensions and position (right side, middle)
+    pw, ph = 200, 140
+    px = iw - pw - 10  # 10px from right edge
+    py = (ih - ph) // 2 - 50  # Center vertically, offset up to avoid safety panel
+    
+    # Draw panel background
+    _alpha_rect(frame, px, py, pw, ph, C_PANEL, alpha=0.7)
+    
+    # Determine border color based on mode
+    if env_data["mode"] == "DAY":
+        border_color = C_YELLOW
+    elif env_data["mode"] == "NIGHT":
+        border_color = (100, 100, 255)  # Light blue
+    else:  # DUSK
+        border_color = C_ORANGE
+    
+    cv2.rectangle(frame, (px, py), (px + pw, py + ph), border_color, 1)
+    
+    # Title
+    cv2.putText(frame, "ENVIRONMENT", (px + 8, py + 18),
+                FONT, 0.45, C_WHITE, 1, cv2.LINE_AA)
+    
+    # Mode (DAY/NIGHT/DUSK)
+    mode_color = border_color
+    cv2.putText(frame, f"Mode: {env_data['mode']}", (px + 8, py + 38),
+                FONT, 0.4, mode_color, 1, cv2.LINE_AA)
+    
+    # Ambient Light (Lux)
+    lux_value = env_data["lux"]
+    cv2.putText(frame, f"Lux: {lux_value:,}", (px + 8, py + 54),
+                FONT, 0.4, C_WHITE, 1, cv2.LINE_AA)
+    
+    # Weather condition
+    weather_color = C_WHITE
+    if env_data["weather"] in ["Sunny", "Partly Cloudy"]:
+        weather_color = C_YELLOW
+    elif env_data["weather"] in ["Cloudy", "Overcast"]:
+        weather_color = (180, 180, 180)  # Light gray
+    
+    cv2.putText(frame, f"Weather: {env_data['weather']}", (px + 8, py + 70),
+                FONT, 0.4, weather_color, 1, cv2.LINE_AA)
+    
+    # Temperature
+    temp_color = C_WHITE
+    temp = env_data["temp"]
+    if temp > 30:
+        temp_color = C_ORANGE  # Hot
+    elif temp < 10:
+        temp_color = C_CYAN   # Cold
+    
+    cv2.putText(frame, f"Temp: {temp}°C", (px + 8, py + 86),
+                FONT, 0.4, temp_color, 1, cv2.LINE_AA)
+    
+    # Wind Speed
+    wind_color = C_WHITE
+    wind = env_data["wind"]
+    if wind > 3.0:
+        wind_color = C_ORANGE  # Windy conditions
+    
+    cv2.putText(frame, f"Wind: {wind} m/s", (px + 8, py + 102),
+                FONT, 0.4, wind_color, 1, cv2.LINE_AA)
+    
+    # Light level bar (visual indicator)
+    bar_y = py + 115
+    bar_height = 8
+    lux_max = 5000  # Max lux for bar display
+    lux_for_bar = min(lux_value, lux_max)
+    
+    # Color code the light bar
+    if lux_value > 3000:
+        bar_color = C_YELLOW  # Bright daylight
+    elif lux_value > 1000:
+        bar_color = C_ORANGE  # Moderate light
+    else:
+        bar_color = C_CYAN    # Low light
+    
+    _bar(frame, px + 8, bar_y, pw - 16, bar_height, lux_for_bar, lux_max, bar_color)
+    
+    # Small label for the light bar
+    cv2.putText(frame, "Light Level", (px + 8, py + 132),
+                FONT_MONO, 0.3, (150, 150, 150), 1, cv2.LINE_AA)
