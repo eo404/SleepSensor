@@ -92,6 +92,7 @@ PERIODIC_TIP_SEC = 300.0  # wellness tip every 5 minutes
 SCORE_WARN_COOLDOWN = 60.0   # don't repeat score warning within this window
 YAWN_VOICE_COOLDOWN = 30.0   # don't repeat yawn message within this window
 HEAD_VOICE_COOLDOWN = 20.0   # don't repeat head-pose message within this window
+HUD_MESSAGE_TTL_SEC = 6.0
 
 
 class SafetyAwarenessEngine:
@@ -107,10 +108,34 @@ class SafetyAwarenessEngine:
         self._last_yawn_voice_t = 0.0
         self._last_head_voice_t = 0.0
         self._prev_score_label = "SAFE"
+        self._hud_message = "System ready. Monitoring driver safety."
+        self._hud_message_until = time.time() + HUD_MESSAGE_TTL_SEC
 
         # Stats for score calculation
         self._bad_pose_frames = 0
         self._total_frames = 0
+
+    def _set_hud_message(self, text: str) -> None:
+        self._hud_message = text
+        self._hud_message_until = time.time() + HUD_MESSAGE_TTL_SEC
+
+    def _announce(self, spoken_text: str, *, display_text: str | None = None,
+                  priority: bool = False, only_if_free: bool = False) -> bool:
+        if only_if_free:
+            queued = self.voice.say_if_free(spoken_text)
+        else:
+            self.voice.say(spoken_text, priority=priority)
+            queued = True
+
+        if queued:
+            self._set_hud_message(display_text or spoken_text)
+        return queued
+
+    @property
+    def hud_message(self) -> str | None:
+        if time.time() > self._hud_message_until:
+            return None
+        return self._hud_message
 
     # ── Main update (call every frame) ───────────────────────────────────────
 
@@ -122,7 +147,7 @@ class SafetyAwarenessEngine:
         drive_msg = self.drive_timer.pop_pending_message()
         if drive_msg:
             short, long_msg = drive_msg
-            self.voice.say(long_msg, priority=False)
+            self._announce(long_msg, display_text=short, priority=False)
 
         # ── Safety score ──────────────────────────────────────────────────────
         self._total_frames += 1
@@ -144,7 +169,7 @@ class SafetyAwarenessEngine:
         label = self.safety_score.label
         if label in _SCORE_WARNING and label != self._prev_score_label:
             if now - self._last_score_warn_t > SCORE_WARN_COOLDOWN:
-                self.voice.say(_SCORE_WARNING[label], priority=False)
+                self._announce(_SCORE_WARNING[label], priority=False)
                 self._last_score_warn_t = now
         self._prev_score_label = label
 
@@ -153,25 +178,25 @@ class SafetyAwarenessEngine:
 
         if alarm_stage == 0 and prev_stage > 0:
             # Alarm cleared
-            self.voice.say(random.choice(_CLEARED_MESSAGES), priority=True)
+            self._announce(random.choice(_CLEARED_MESSAGES), priority=True)
 
         elif alarm_stage == 1:
             if prev_stage == 0:
                 # First trigger
-                self.voice.say(random.choice(_FATIGUE_STAGE1), priority=True)
+                self._announce(random.choice(_FATIGUE_STAGE1), priority=True)
                 self._last_repeat_t = now
             elif now - self._last_repeat_t >= REPEAT_INTERVAL_SEC:
                 # Repeat while active
-                self.voice.say(random.choice(_FATIGUE_STAGE1), priority=False)
+                self._announce(random.choice(_FATIGUE_STAGE1), priority=False)
                 self._last_repeat_t = now
 
         elif alarm_stage == 2:
             if prev_stage < 2:
                 # Escalation
-                self.voice.say(random.choice(_FATIGUE_STAGE2), priority=True)
+                self._announce(random.choice(_FATIGUE_STAGE2), priority=True)
                 self._last_repeat_t = now
             elif now - self._last_repeat_t >= REPEAT_INTERVAL_SEC:
-                self.voice.say(random.choice(_FATIGUE_STAGE2), priority=False)
+                self._announce(random.choice(_FATIGUE_STAGE2), priority=False)
                 self._last_repeat_t = now
 
         self._alarm_stage = alarm_stage
@@ -179,17 +204,19 @@ class SafetyAwarenessEngine:
         # ── Yawn event voice ──────────────────────────────────────────────────
         if state.yawning and now - self._last_yawn_voice_t > YAWN_VOICE_COOLDOWN:
             if alarm_stage == 0:   # don't interrupt an active alarm
-                self.voice.say_if_free(random.choice(_YAWN_MESSAGES))
+                self._announce(random.choice(
+                    _YAWN_MESSAGES), only_if_free=True)
             self._last_yawn_voice_t = now
 
         # ── Head pose voice ───────────────────────────────────────────────────
         if state.bad_head_pose and now - self._last_head_voice_t > HEAD_VOICE_COOLDOWN:
             if alarm_stage == 0:
-                self.voice.say_if_free(random.choice(_HEAD_POSE_MESSAGES))
+                self._announce(random.choice(
+                    _HEAD_POSE_MESSAGES), only_if_free=True)
             self._last_head_voice_t = now
 
         # ── Periodic wellness tips ────────────────────────────────────────────
         if (alarm_stage == 0
                 and now - self._last_tip_t > PERIODIC_TIP_SEC):
-            self.voice.say_if_free(random.choice(_PERIODIC_TIPS))
-            self._last_tip_t = now
+            if self._announce(random.choice(_PERIODIC_TIPS), only_if_free=True):
+                self._last_tip_t = now
